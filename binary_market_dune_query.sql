@@ -14,8 +14,8 @@ trades AS (
     (price * shares) AS usdc_value,
     block_time,
     ROW_NUMBER() OVER (ORDER BY block_time) AS trade_number
-  FROM polymarket_polygon.market_trades, params
-  WHERE condition_id = params.condition_id
+  FROM polymarket_polygon.market_trades
+  WHERE condition_id = (SELECT condition_id FROM params)
 ),
 
 
@@ -110,14 +110,9 @@ with_roi AS (
       leftover value depends on which side the wallet's leftover shares are on and how the market resolved
       if market resolved YES: yes shares worth 1 each, no shares worth 0
       if market resolved NO:  no shares worth 1 each, yes shares worth 0
-    */
-    CASE
-      WHEN params.resolution_price = 1 --yes wins
-        THEN l.leftover_yes_shares * 1
-      ELSE --no wins
-        l.leftover_no_shares * 1
-    END AS leftover_value,
 
+      Uses this logic to assign value to the leftover shares, which is used in the ROI formula
+    */
     CASE
       WHEN l.total_spent = 0 THEN NULL
       ELSE (
