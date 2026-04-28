@@ -1,6 +1,6 @@
 /*
 QUERY PURPOSE:
-- For a given market condition, identify traders who made their first trade after a specified start date
+- For a given *RESOLVED* market, identify traders who made their first trade after a specified start date
 - Split traders into two groups based on whether their first trade was before or after a specified timestamp (IN PARAMS)
 - If both groups have at least X traders, randomly sample Y traders from each group and return their wallet addresses and timestamp of first trade
 - If either group has fewer than X traders, return a daily count of each day’s amount of NEW traders (no wallet addresses)
@@ -8,58 +8,63 @@ QUERY PURPOSE:
 **IMPORTANT:** EDIT PARAMS ONLY
 */
 
-WITH params AS (
+params AS (
     SELECT
-        0x<YOUR_CONDITION_ID_HERE>          AS condition_id,       -- market condition ID
-        DATE '2024-01-01'                   AS market_start,       -- market open date
-        TIMESTAMP '2024-06-01 00:00:00'     AS split_timestamp,    -- group A/B split point
-        10                                  AS min_group_size,     -- minimum wallets per group (X)
-        5                                   AS sample_size         -- wallets to sample per group (Y)... must be <= min_group_size
+        0x<YOUR_CONDITION_ID_HERE>          AS condition_id,
+        DATE '2024-01-01'                   AS market_start,
+        TIMESTAMP '2024-06-01 00:00:00'     AS split_timestamp,
+        TIMESTAMP '2024-06-01 00:00:00'     AS market_end,        
+        10                                  AS min_group_size, --MUST BE <= SAMPLE_SIZE
+        5                                   AS sample_size
 ),
 
+--Determine each wallet's first transaction in the market (whether it was as a taker or maker)
 all_traders AS (
     SELECT
         wallet_address,
         MIN(block_time) AS first_trade_time
-    FROM (
-        SELECT maker AS wallet_address, block_time
-        FROM polymarket_polygon.market_trades, params
-        WHERE block_time >= params.market_start
-          AND condition_id = params.condition_id
-
-        UNION ALL
-
-        SELECT taker AS wallet_address, block_time
-        FROM polymarket_polygon.market_trades, params
-        WHERE block_time >= params.market_start
-          AND condition_id = params.condition_id
-    ) AS trades
+    FROM polymarket_polygon.market_trades
+    CROSS JOIN UNNEST(ARRAY[maker, taker]) AS t(wallet_address)
+    CROSS JOIN params
+    WHERE block_time >= params.market_start
+      AND block_time <= params.market_end
+      AND condition_id = params.condition_id
     GROUP BY wallet_address
 ),
 
+--Split into 2 groups based on early/late relative to split_timestamp
 grouped AS (
     SELECT
         wallet_address,
         first_trade_time,
         CASE
-            WHEN first_trade_time <= (SELECT split_timestamp FROM params) THEN 'A'
+            WHEN first_trade_time <= (SELECT split_timestamp FROM params) THEN 'A' --A = early; B = late
             ELSE 'B'
         END AS group_label
     FROM all_traders
 ),
 
--- Check the size of the smaller group
+--Checks how many wallets in group A & how many wallets in group B
 group_sizes AS (
     SELECT group_label, COUNT(*) AS cnt
     FROM grouped
     GROUP BY group_label
 ),
 
+--Figures out how many wallets are in the SMALLEST group (between A and B) and ensures that there is at least 1 wallet present in both groups
 smallest_group AS (
-    SELECT MIN(cnt) AS min_cnt FROM group_sizes
+    SELECT
+        MIN(cnt)                        AS min_cnt,
+        COUNT(DISTINCT group_label) = 2 AS both_groups_present
+    FROM group_sizes
 ),
 
--- Randomly rank wallets within each group for sampling
+/*
+Randomizes the row order within each group (meaning each wallet is now in a random spot but still with its group A/B)
+and counts up from 1 to the amount of wallets in the group, making it column "rn"
+
+**THIS IS TO ASSIGN A RANDOM NUMBER TO EACH WALLET WITHIN EACH GROUP**
+*/
 sampled AS (
     SELECT
         wallet_address,
@@ -70,7 +75,19 @@ sampled AS (
 ),
 
 /*
-OUTPUT A: Groups are large enough; return sampled wallets
+POTENTIAL OUTPUT [A]:
+Given that: 
+    - the smallest group meets the minimum group size 
+    - the smallest group is NOT blank (to avoid potential bugs w/ null)
+
+--> Group A already has randomly ordered wallets with a corresponding label from 1 to the size of Group A. The same applies to Group B.
+--> Essentially checks which rows have rn <= sample_size and only keeps those rows
+
+The output is 4 columns: 
+result_type (this will be the same string for all rows: sampled_wallet)
+identifier (string: wallet ID)
+value (string: time of first trade)
+group_label (string: either A or B)
 */
 wallet_result AS (
     SELECT
@@ -81,10 +98,23 @@ wallet_result AS (
     FROM sampled
     WHERE rn <= (SELECT sample_size FROM params)
       AND (SELECT min_cnt FROM smallest_group) >= (SELECT min_group_size FROM params)
+      AND (SELECT both_groups_present FROM smallest_group)
 ),
 
 /*
-OUTPUT B: A group is too small; return count of new traders per day instead
+POTENTIAL OUTPUT [B]:
+Given that:
+    - the smallest group does not meet the minimum group size OR one of the groups is missing (null)
+
+--> for each wallet, takes their first trade time stamp and gets rid of exact time of day (just date is kept)
+--> counts how many unique wallets had their first trade on the same day
+--> null is put in group_label just for consistency (4 columns for both outputs)
+
+The output is 4 columns:
+result_type (this will be the same string for all rows: daily_new_wallets)
+identifier (string: date as a time stamp at 00:00:00)
+value (string: number of new wallets)
+group_label (always null)
 */
 daily_result AS (
     SELECT
@@ -93,10 +123,14 @@ daily_result AS (
         CAST(COUNT(*) AS VARCHAR)                                   AS value,
         NULL                                                        AS group_label
     FROM all_traders
-    WHERE (SELECT min_cnt FROM smallest_group) < (SELECT min_group_size FROM params)
+    WHERE (
+    (SELECT min_cnt FROM smallest_group) < (SELECT min_group_size FROM params)
+    OR NOT (SELECT both_groups_present FROM smallest_group)
+    )
     GROUP BY DATE_TRUNC('day', first_trade_time)
 )
 
+--combines both tables (ONE OF THEM WILL ALWAYS BE BLANK AND THE OTHER WILL BE FILLED)
 SELECT * FROM wallet_result
 UNION ALL
 SELECT * FROM daily_result
