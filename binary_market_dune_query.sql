@@ -130,7 +130,11 @@ daily_result AS (
     GROUP BY DATE_TRUNC('day', first_trade_time)
 )
 
---combines both tables (ONE OF THEM WILL ALWAYS BE BLANK AND THE OTHER WILL BE FILLED)
+/*
+combines both Ouput A and Output B 
+    Note: ONE OF THEM WILL ALWAYS BE BLANK AND THE OTHER WILL BE FILLED.
+    THIS IS BASED ON THE PRECONDITIONS SPECIFIED IN THE COMMENTS ABOVE EACH CTE.
+*/
 SELECT * FROM wallet_result
 UNION ALL
 SELECT * FROM daily_result
