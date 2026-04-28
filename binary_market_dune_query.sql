@@ -8,18 +8,18 @@ QUERY PURPOSE:
 **IMPORTANT:** EDIT PARAMS ONLY
 */
 
-params AS (
+WITH params AS (
     SELECT
         0x87d67272f0ce1bb0d80ba12a1ab79287b2a235a5f361f5bcbc06ea0ce34e61c5          AS condition_id,
         TIMESTAMP '2024-09-03 16:16:55.822'                   AS market_start,
         TIMESTAMP '2024-12-17 19:00:00'     AS split_timestamp, --should be before market_end
         TIMESTAMP '2024-12-31 12:00:00'     AS market_end,        
-        3000                                  AS min_group_size, --MUST BE >= SAMPLE_SIZE
-        250                                   AS sample_size
+        501                                  AS min_group_size, --MUST BE >= SAMPLE_SIZE
+        50                                   AS sample_size
 ),
 
 --Determine each wallet's first transaction in the market (whether it was as a taker or maker)
-WITH all_traders AS (
+all_traders AS (
     SELECT
         wallet_address,
         MIN(block_time) AS first_trade_time
