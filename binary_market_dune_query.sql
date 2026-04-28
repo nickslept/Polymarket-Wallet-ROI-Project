@@ -10,12 +10,12 @@ QUERY PURPOSE:
 
 params AS (
     SELECT
-        0x<YOUR_CONDITION_ID_HERE>          AS condition_id,
-        DATE '2024-01-01'                   AS market_start,
-        TIMESTAMP '2024-06-01 00:00:00'     AS split_timestamp,
-        TIMESTAMP '2024-06-01 00:00:00'     AS market_end,        
-        10                                  AS min_group_size, --MUST BE <= SAMPLE_SIZE
-        5                                   AS sample_size
+        0x87d67272f0ce1bb0d80ba12a1ab79287b2a235a5f361f5bcbc06ea0ce34e61c5          AS condition_id,
+        TIMESTAMP '2024-09-03 16:16:55.822'                   AS market_start,
+        TIMESTAMP '2024-12-17 19:00:00'     AS split_timestamp, --should be before market_end
+        TIMESTAMP '2024-12-31 12:00:00'     AS market_end,        
+        500                                  AS min_group_size, --MUST BE >= SAMPLE_SIZE
+        250                                   AS sample_size
 ),
 
 --Determine each wallet's first transaction in the market (whether it was as a taker or maker)
