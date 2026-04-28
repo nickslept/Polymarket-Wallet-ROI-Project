@@ -23,7 +23,7 @@ WITH all_traders AS (
     SELECT
         wallet_address,
         MIN(block_time) AS first_trade_time
-    FROM polymarket_polygon.market_trades as mt
+    FROM polymarket_polygon.market_trades AS mt
     CROSS JOIN UNNEST(ARRAY[maker, taker]) AS t(wallet_address)
     CROSS JOIN params
     WHERE block_time >= params.market_start
