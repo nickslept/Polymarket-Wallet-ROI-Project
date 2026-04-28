@@ -10,5 +10,5 @@ response = requests.get(
     headers={"X-Dune-Api-Key": API_KEY}
 )
 
-with open("results.csv", "w") as f:
-    f.write(response.text)
+with open("dune_query_results.csv", "w") as file:
+    file.write(response.text)
