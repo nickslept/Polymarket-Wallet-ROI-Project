@@ -14,21 +14,21 @@ params AS (
         TIMESTAMP '2024-09-03 16:16:55.822'                   AS market_start,
         TIMESTAMP '2024-12-17 19:00:00'     AS split_timestamp, --should be before market_end
         TIMESTAMP '2024-12-31 12:00:00'     AS market_end,        
-        500                                  AS min_group_size, --MUST BE >= SAMPLE_SIZE
+        3000                                  AS min_group_size, --MUST BE >= SAMPLE_SIZE
         250                                   AS sample_size
 ),
 
 --Determine each wallet's first transaction in the market (whether it was as a taker or maker)
-all_traders AS (
+WITH all_traders AS (
     SELECT
         wallet_address,
         MIN(block_time) AS first_trade_time
-    FROM polymarket_polygon.market_trades
+    FROM polymarket_polygon.market_trades as mt
     CROSS JOIN UNNEST(ARRAY[maker, taker]) AS t(wallet_address)
     CROSS JOIN params
     WHERE block_time >= params.market_start
       AND block_time <= params.market_end
-      AND condition_id = params.condition_id
+      AND mt.condition_id = params.condition_id
     GROUP BY wallet_address
 ),
 
