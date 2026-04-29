@@ -195,35 +195,35 @@ def main():
         if address in results: #if the wallet's roi and other information has already been stored, go to the next wallet
             print(f"  Already processed, skipping.\n") 
             continue
-        #NEED TO LOOK AT BELOW****************
-        trades = load_raw_trades(address)
-        if trades is None:
+        
+        trades = load_raw_trades(address) #looks for if ALL the trades the wallet made in a specific market was saved as .json file (aka you called the api enough times for the specific wallet and got all their trades in the specific market)
+        if trades is None: #the trades for the wallet aren't saved/cached
             try:
                 trades = fetch_trades(address, MARKET_ID)
             except Exception as e:
                 print(f"  Fetch failed: {e} -- skipping.\n")
-                continue
+                continue #stops the results from being saved if there are any API-related issues (e.g. if you only get half the trades for a wallet, the wallet WONT be saved to results)
             save_raw_trades(address, trades)
             print(f"  Fetched and cached {len(trades)} trades.")
-        else:
+        else: #the trades for the wallet were saved already
             print(f"  Loaded {len(trades)} trades from cache.")
 
-        roi_data = calculate_roi(trades, RESOLUTION_PRICE)
+        roi_data = calculate_roi(trades, RESOLUTION_PRICE) #calculates roi (and some additional information) for the wallet
         if roi_data is None:
             print(f"  ROI: N/A (no buy trades found)\n")
             results[address] = {"group": group, "roi": None, "trade_count": len(trades)}
-        else:
+        else: #prints out data obtained through calculate_roi() for the wallet and then 
             print(f"  ROI: {roi_data['roi']:+.4%}  "
                     f"(spent={roi_data['total_spent']:.4f}, "
                     f"sold={roi_data['total_sold']:.4f}, "
                     f"leftover={roi_data['leftover_value']:.4f}, "
                     f"shares_bought={roi_data['shares_bought']:.4f}, "
                     f"shares_sold={roi_data['shares_sold']:.4f})\n")
-            results[address] = {"group": group, **roi_data}
+            results[address] = {"group": group, **roi_data} #adds the wallet address as a key in the results dict and its value is a dictionary containing the data from calulate_roi()
 
-        save_results(results)
+        save_results(results) #saves the current "results" dictionary as a .json file (for future use)
 
-    # Output CSV 
+    # Output CSV (AFTER ALL THE WALLETS HAVE BEEN PROCESSED)
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "address", "group", "roi", "total_spent", "total_sold",
