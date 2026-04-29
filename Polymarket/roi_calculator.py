@@ -31,7 +31,7 @@ PAGE_LIMIT       = 5000
 MAX_RETRIES      = 4
 REQUEST_TIMEOUT  = 30
 
-#checks that the directories listed in the config exist, raises errors if they don't
+#checks that the directories listed in the config exist, raises errors if they don't, but makes it so just rerun the program
 def check_dirs():
     if not POLY_DIR.exists():
         raise FileNotFoundError(
@@ -43,6 +43,7 @@ def check_dirs():
             f"DATA_DIR does not exist: {DATA_DIR}\n"
             "Please update the DATA_DIR path in the CONFIG section."
         )
+    RAW_TRADES_DIR.mkdir(parents=True, exist_ok=True) #creates raw_trades directory if it doesn't already exist (that's what exist_ok=True parameter does)
 
 #reads the csv being used as input to make a list of dictionaries containing the wallet address and group it is in
 def read_wallets(csv_path: Path) -> list[dict]:
