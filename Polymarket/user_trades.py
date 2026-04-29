@@ -27,7 +27,7 @@ RESULTS_FILE   = POLY_DIR / "roi_results.json"
 OUTPUT_CSV     = POLY_DIR / "roi_output.csv"
 
 API_BASE         = "https://data-api.polymarket.com"
-PAGE_LIMIT       = 1000
+PAGE_LIMIT       = 5000
 MAX_RETRIES      = 4
 REQUEST_TIMEOUT  = 30
 
@@ -69,16 +69,16 @@ def load_raw_trades(address: str) -> list | None:
     path = trade_cache_path(address)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
-
+#loads the results of which wallets have been fully cached AND ROI calculated
 def load_results() -> dict:
     return json.loads(RESULTS_FILE.read_text(encoding="utf-8")) if RESULTS_FILE.exists() else {}
 
-
+#saves the calculated roi (and additional information **BUT NOT THE FULL TRADE HISTORY THOUGH**) to roi_results.json
 def save_results(results: dict):
     with open(RESULTS_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
 
-
+#makes an API request to polymarket and handles the different types of errors
 def get_with_retry(url: str, params: dict) -> list:
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -97,7 +97,8 @@ def get_with_retry(url: str, params: dict) -> list:
             time.sleep(wait)
     raise RuntimeError(f"Exceeded {MAX_RETRIES} retries for {url}")
 
-
+#calls on get_with_retry() to make API requests for a specific wallet in a specific market
+#Does this in batches and makes a list of all the information the API requests return (to be processed later)
 def fetch_trades(address: str, market_id: str) -> list:
     all_trades = []
     offset = 0
@@ -117,17 +118,26 @@ def fetch_trades(address: str, market_id: str) -> list:
         offset += PAGE_LIMIT
     return all_trades
 
-#issue: does not account for merges
+#calculates ROI of the trader and returns a dictionary containing:
+    #roi
+    #total spent ($) 
+    #total sold ($) 
+    #left over value ($)
+    #number of trades
+    #shares bought
+    #shares sold 
+#Known issue: does not account for merges (especially a problem when calculating leftover shares value)
 def calculate_roi(trades: list, resolution_price: int) -> dict | None:
     """
     ROI = (Total Sold + Leftover Shares Value - Total Spent ) / Total Spent
 
     Total Sold            = sum(sell_price * shares_sold)
     Total Spent           = sum(buy_price  * shares_bought)
-    Leftover Shares Value = (shares_bought - shares_sold) * resolution_price
+    Leftover Shares Value = (shares_bought - shares_sold) * resolution_price 
 
     Returns None if Total Spent is zero (wallet never bought anything).
     """
+    #Decimal to avoid rounding errors w/ floats
     total_spent   = Decimal("0")
     total_sold    = Decimal("0")
     shares_bought = Decimal("0")
@@ -151,7 +161,7 @@ def calculate_roi(trades: list, resolution_price: int) -> dict | None:
     if total_spent == Decimal("0"):
         return None
 
-    leftover       = max(shares_bought - shares_sold, Decimal("0"))
+    leftover       = max(shares_bought - shares_sold, Decimal("0")) #max() to avoid negative numbers resulting from inaccurate data (negative leftover = sold more shares than bought)
     leftover_value = leftover * Decimal(str(resolution_price))
     roi            = (total_sold + leftover_value - total_spent) / total_spent
 
@@ -161,6 +171,8 @@ def calculate_roi(trades: list, resolution_price: int) -> dict | None:
         "total_sold":     float(total_sold),
         "leftover_value": float(leftover_value),
         "trade_count":    len(trades),
+        "shares_bought":  float(shares_bought),
+        "shares_sold":    float(shares_sold),
     }
 
 
@@ -176,14 +188,14 @@ def main():
     results = load_results()
     print(f"{len(results)} wallets already done (will skip)\n")
 
-    for i, w in enumerate(wallets):
+    for i, w in enumerate(wallets): #loops through each wallet 
         address, group = w["address"], w["group"]
-        print(f"[{i+1}/{len(wallets)}] {address}  group={group}")
+        print(f"[{i+1}/{len(wallets)}] {address}  group={group}") 
 
-        if address in results:
-            print(f"  Already processed, skipping.\n")
+        if address in results: #if the wallet's roi and other information has already been stored, go to the next wallet
+            print(f"  Already processed, skipping.\n") 
             continue
-
+        #NEED TO LOOK AT BELOW****************
         trades = load_raw_trades(address)
         if trades is None:
             try:
@@ -202,9 +214,11 @@ def main():
             results[address] = {"group": group, "roi": None, "trade_count": len(trades)}
         else:
             print(f"  ROI: {roi_data['roi']:+.4%}  "
-                  f"(spent={roi_data['total_spent']:.4f}, "
-                  f"sold={roi_data['total_sold']:.4f}, "
-                  f"leftover={roi_data['leftover_value']:.4f})\n")
+                    f"(spent={roi_data['total_spent']:.4f}, "
+                    f"sold={roi_data['total_sold']:.4f}, "
+                    f"leftover={roi_data['leftover_value']:.4f}, "
+                    f"shares_bought={roi_data['shares_bought']:.4f}, "
+                    f"shares_sold={roi_data['shares_sold']:.4f})\n")
             results[address] = {"group": group, **roi_data}
 
         save_results(results)
@@ -213,7 +227,7 @@ def main():
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "address", "group", "roi", "total_spent", "total_sold",
-            "leftover_value", "trade_count",
+            "leftover_value", "trade_count", "shares_bought", "shares_sold",
         ])
         writer.writeheader()
         for addr, data in results.items():
