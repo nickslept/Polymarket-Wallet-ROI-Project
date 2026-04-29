@@ -18,10 +18,10 @@ import requests
 MARKET_ID        = "0x87d67272f0ce1bb0d80ba12a1ab79287b2a235a5f361f5bcbc06ea0ce34e61c5"
 RESOLUTION_PRICE = 1   # 1 = market resolved to YES; 0 = market resolved to NO 
 
-DATA_DIR       = Path(r"C:\Users\nslep\Desktop\VS Code Projects\Polymarket-Wallet-ROI-Project\Polymarket-Wallet-ROI-Project\Dune")
+DATA_DIR       = Path(r"C:\Users\Nicholas\Desktop\VS Code Projects\Polymarket Wallet ROI Project\Polymarket-Wallet-ROI-Project\Dune")
 INPUT_CSV      = DATA_DIR / "output_A.csv"
 
-POLY_DIR       = Path(r"C:\Users\nslep\Desktop\VS Code Projects\Polymarket-Wallet-ROI-Project\Polymarket-Wallet-ROI-Project\Polymarket")
+POLY_DIR       = Path(r"C:\Users\Nicholas\Desktop\VS Code Projects\Polymarket Wallet ROI Project\Polymarket-Wallet-ROI-Project\Polymarket")
 RAW_TRADES_DIR = POLY_DIR / "raw_trades"
 RESULTS_FILE   = POLY_DIR / "roi_results.json"
 OUTPUT_CSV     = POLY_DIR / "roi_output.csv"
