@@ -83,11 +83,12 @@ Given that:
 --> Group A already has randomly ordered wallets with a corresponding label from 1 to the size of Group A. The same applies to Group B.
 --> Essentially checks which rows have rn <= sample_size and only keeps those rows
 
-The output is 4 columns: 
+The output is 5 columns: 
 result_type (this will be the same string for all rows: sampled_wallet)
 identifier (string: wallet ID)
 value (string: time of first trade)
 group_label (string: either A or B)
+pre_sample_group_size (string: the size of the group that the wallet belongs to BEFORE sampling)
 */
 wallet_result AS (
     SELECT
@@ -95,7 +96,7 @@ wallet_result AS (
         CAST(wallet_address AS VARCHAR)         AS identifier,
         CAST(first_trade_time AS VARCHAR)       AS value,
         s.group_label,
-        gs.cnt                                  AS pre_sample_group_size  
+        CAST(gs.cnt AS VARCHAR)                 AS pre_sample_group_size  
     FROM sampled s
     JOIN group_sizes gs ON s.group_label = gs.group_label
     WHERE rn <= (SELECT sample_size FROM params)
@@ -112,11 +113,12 @@ Given that:
 --> counts how many unique wallets had their first trade on the same day
 --> null is put in group_label just for consistency (4 columns for both outputs)
 
-The output is 4 columns:
+The output is 5 columns:
 result_type (this will be the same string for all rows: daily_new_wallets)
 identifier (string: date as a time stamp at 00:00:00)
 value (string: number of new wallets)
-group_label (always null)
+group_label (always null - placeholder to make UNION ALL work)
+pre_sample_group_size (always null - placeholder to make UNION ALL work)
 */
 daily_result AS (
     SELECT
