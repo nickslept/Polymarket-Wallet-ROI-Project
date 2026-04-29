@@ -16,7 +16,7 @@ import requests
 
 # CONFIG
 MARKET_ID        = "0x87d67272f0ce1bb0d80ba12a1ab79287b2a235a5f361f5bcbc06ea0ce34e61c5"
-RESOLUTION_PRICE = 1   # 1 = market resolved to YES; 0 = market resolved to NO 
+RESOLUTION_OUTCOME = "Yes" #used to calculate leftover shares value assuming no merges happened
 
 DATA_DIR       = Path(r"C:\Users\Nicholas\Desktop\VS Code Projects\Polymarket Wallet ROI Project\Polymarket-Wallet-ROI-Project\Dune")
 INPUT_CSV      = DATA_DIR / "output_A.csv"
@@ -119,61 +119,85 @@ def fetch_trades(address: str, market_id: str) -> list:
         offset += PAGE_LIMIT
     return all_trades
 
-#calculates ROI of the trader and returns a dictionary containing:
-    #roi
-    #total spent ($) 
-    #total sold ($) 
-    #left over value ($)
-    #number of trades
-    #shares bought
-    #shares sold 
+#calculates the ROI for a wallet based on the trades it made and the resolution outcome of the market
 #Known issue: does not account for merges (especially a problem when calculating leftover shares value)
-def calculate_roi(trades: list, resolution_price: int) -> dict | None:
+def calculate_roi(trades: list, resolution_outcome: str) -> dict | None:
     """
     ROI = (Total Sold + Leftover Shares Value - Total Spent ) / Total Spent
 
-    Total Sold            = sum(sell_price * shares_sold)
-    Total Spent           = sum(buy_price  * shares_bought)
-    Leftover Shares Value = (shares_bought - shares_sold) * resolution_price 
-
+    YES and NO shares are tracked completely separately.
+    At resolution, shares matching resolution_outcome are worth $1; the other side is worth $0.
+    Leftover value is only counted for the winning outcome's shares.
+ 
     Returns None if Total Spent is zero (wallet never bought anything).
     """
     #Decimal to avoid rounding errors w/ floats
-    total_spent   = Decimal("0")
-    total_sold    = Decimal("0")
-    shares_bought = Decimal("0")
-    shares_sold   = Decimal("0")
+    yes_shares_bought = Decimal("0")  
+    yes_shares_sold   = Decimal("0")  
+    yes_spent         = Decimal("0") 
+    yes_sold          = Decimal("0")  
+ 
+    no_shares_bought  = Decimal("0")  
+    no_shares_sold    = Decimal("0")  
+    no_spent          = Decimal("0")  
+    no_sold           = Decimal("0")  
 
     for trade in trades:
         try:
             price = Decimal(str(trade["price"]))
             size  = Decimal(str(trade["size"]))
             side  = trade["side"].upper()
+            outcome = trade["outcome"].strip().capitalize() #just capitalizes the first letter - e.g. "YES" or "yes" to "Yes"
         except (KeyError, TypeError, InvalidOperation):
             continue
 
-        if side == "BUY":
-            total_spent   += price * size
-            shares_bought += size
-        elif side == "SELL":
-            total_sold  += price * size
-            shares_sold += size
+        if outcome == "Yes": 
+            if side == "BUY":
+                yes_spent         += price * size
+                yes_shares_bought += size
+            elif side == "SELL":
+                yes_sold          += price * size
+                yes_shares_sold   += size
+        elif outcome == "No":  
+            if side == "BUY":
+                no_spent          += price * size
+                no_shares_bought  += size
+            elif side == "SELL":
+                no_sold           += price * size
+                no_shares_sold    += size
+ 
+    total_spent = yes_spent + no_spent  
 
     if total_spent == Decimal("0"):
         return None
 
-    leftover       = max(shares_bought - shares_sold, Decimal("0")) #max() to avoid negative numbers resulting from inaccurate data (negative leftover = sold more shares than bought)
-    leftover_value = leftover * Decimal(str(resolution_price))
-    roi            = (total_sold + leftover_value - total_spent) / total_spent
-
+    yes_leftover = max(yes_shares_bought - yes_shares_sold, Decimal("0")) 
+    no_leftover  = max(no_shares_bought  - no_shares_sold,  Decimal("0"))  
+ 
+    yes_leftover_value = yes_leftover * (Decimal("1") if resolution_outcome == "Yes" else Decimal("0"))  
+    no_leftover_value  = no_leftover  * (Decimal("1") if resolution_outcome == "No"  else Decimal("0"))  
+ 
+    total_sold          = yes_sold + no_sold                            
+    total_leftover_value = yes_leftover_value + no_leftover_value       
+ 
+    roi = (total_sold + total_leftover_value - total_spent) / total_spent  
+ 
     return {
-        "roi":            float(roi),
-        "total_spent":    float(total_spent),
-        "total_sold":     float(total_sold),
-        "leftover_value": float(leftover_value),
-        "trade_count":    len(trades),
-        "shares_bought":  float(shares_bought),
-        "shares_sold":    float(shares_sold),
+        "roi":               float(roi),
+        "total_spent":       float(total_spent),          
+        "total_sold":        float(total_sold),           
+        "leftover_value":    float(total_leftover_value), 
+        "trade_count":       len(trades),
+        "yes_shares_bought": float(yes_shares_bought),    
+        "yes_shares_sold":   float(yes_shares_sold),      
+        "yes_spent":         float(yes_spent),            
+        "yes_sold":          float(yes_sold),             
+        "yes_leftover_value":float(yes_leftover_value),   
+        "no_shares_bought":  float(no_shares_bought),     
+        "no_shares_sold":    float(no_shares_sold),       
+        "no_spent":          float(no_spent),             
+        "no_sold":           float(no_sold),              
+        "no_leftover_value": float(no_leftover_value),    
     }
 
 
@@ -181,7 +205,7 @@ def main():
     check_dirs()
 
     print(f"Market     : {MARKET_ID}")
-    print(f"Resolution : {'YES (1)' if RESOLUTION_PRICE == 1 else 'NO (0)'}\n")
+    print(f"Resolution : {RESOLUTION_OUTCOME}\n")  
 
     wallets = read_wallets(INPUT_CSV)
     print(f"Loaded {len(wallets)} wallets from CSV")
@@ -209,7 +233,7 @@ def main():
         else: #the trades for the wallet were saved already
             print(f"  Loaded {len(trades)} trades from cache.")
 
-        roi_data = calculate_roi(trades, RESOLUTION_PRICE) #calculates roi (and some additional information) for the wallet
+        roi_data = calculate_roi(trades, RESOLUTION_OUTCOME) #calculates roi (and some additional information) for the wallet
         if roi_data is None:
             print(f"  ROI: N/A (no buy trades found)\n")
             results[address] = {"group": group, "roi": None, "trade_count": len(trades)}
@@ -218,8 +242,10 @@ def main():
                     f"(spent={roi_data['total_spent']:.4f}, "
                     f"sold={roi_data['total_sold']:.4f}, "
                     f"leftover={roi_data['leftover_value']:.4f}, "
-                    f"shares_bought={roi_data['shares_bought']:.4f}, "
-                    f"shares_sold={roi_data['shares_sold']:.4f})\n")
+                    f"yes_bought={roi_data['yes_shares_bought']:.4f}, "   
+                    f"yes_sold={roi_data['yes_shares_sold']:.4f}, "       
+                    f"no_bought={roi_data['no_shares_bought']:.4f}, "    
+                    f"no_sold={roi_data['no_shares_sold']:.4f})\n")       
             results[address] = {"group": group, **roi_data} #adds the wallet address as a key in the results dict and its value is a dictionary containing the data from calulate_roi()
 
         save_results(results) #saves the current "results" dictionary as a .json file (for future use)
@@ -227,9 +253,11 @@ def main():
     # Output CSV (AFTER ALL THE WALLETS HAVE BEEN PROCESSED)
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
-            "address", "group", "roi", "total_spent", "total_sold",
-            "leftover_value", "trade_count", "shares_bought", "shares_sold",
-        ])
+            "address", "group", "roi",
+            "total_spent", "total_sold", "leftover_value", "trade_count",
+            "yes_shares_bought", "yes_shares_sold", "yes_spent", "yes_sold", "yes_leftover_value",
+            "no_shares_bought",  "no_shares_sold",  "no_spent",  "no_sold",  "no_leftover_value",
+        ], restval="") #restval="" stops crashes from occuring for wallets with roi=None
         writer.writeheader()
         for addr, data in results.items():
             writer.writerow({"address": addr, **data})
