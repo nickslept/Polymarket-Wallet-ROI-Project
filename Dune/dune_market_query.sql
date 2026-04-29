@@ -94,8 +94,10 @@ wallet_result AS (
         'sampled_wallet'                        AS result_type,
         CAST(wallet_address AS VARCHAR)         AS identifier,
         CAST(first_trade_time AS VARCHAR)       AS value,
-        group_label
-    FROM sampled
+        s.group_label,
+        gs.cnt                                  AS pre_sample_group_size  
+    FROM sampled s
+    JOIN group_sizes gs ON s.group_label = gs.group_label
     WHERE rn <= (SELECT sample_size FROM params)
       AND (SELECT min_cnt FROM smallest_group) >= (SELECT min_group_size FROM params)
       AND (SELECT both_groups_present FROM smallest_group)
@@ -121,7 +123,8 @@ daily_result AS (
         'daily_new_wallets'                                         AS result_type,
         CAST(DATE_TRUNC('day', first_trade_time) AS VARCHAR)        AS identifier,
         CAST(COUNT(*) AS VARCHAR)                                   AS value,
-        NULL                                                        AS group_label
+        NULL                                                        AS group_label,
+        NULL                                                        AS pre_sample_group_size  -- placeholder to make union all work (# of cols needs to be consistent between the two tables)
     FROM all_traders
     WHERE (
     (SELECT min_cnt FROM smallest_group) < (SELECT min_group_size FROM params)
