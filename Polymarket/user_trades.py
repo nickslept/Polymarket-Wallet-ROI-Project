@@ -18,10 +18,10 @@ import requests
 MARKET_ID        = "0x87d67272f0ce1bb0d80ba12a1ab79287b2a235a5f361f5bcbc06ea0ce34e61c5"
 RESOLUTION_PRICE = 1   # 1 = market resolved to YES; 0 = market resolved to NO 
 
-DATA_DIR       = Path("Dune")
+DATA_DIR       = Path(r"C:\Users\nslep\Desktop\VS Code Projects\Polymarket-Wallet-ROI-Project\Polymarket-Wallet-ROI-Project\Dune")
 INPUT_CSV      = DATA_DIR / "output_A.csv"
 
-POLY_DIR       = Path("Polymarket")
+POLY_DIR       = Path(r"C:\Users\nslep\Desktop\VS Code Projects\Polymarket-Wallet-ROI-Project\Polymarket-Wallet-ROI-Project\Polymarket")
 RAW_TRADES_DIR = POLY_DIR / "raw_trades"
 RESULTS_FILE   = POLY_DIR / "roi_results.json"
 OUTPUT_CSV     = POLY_DIR / "roi_output.csv"
@@ -31,9 +31,18 @@ PAGE_LIMIT       = 1000
 MAX_RETRIES      = 4
 REQUEST_TIMEOUT  = 30
 
-
-def setup_dirs():
-    RAW_TRADES_DIR.mkdir(parents=True, exist_ok=True)
+#checks that the directories listed in the config exist, raises errors if they don't
+def check_dirs():
+    if not POLY_DIR.exists():
+        raise FileNotFoundError(
+            f"POLY_DIR does not exist: {POLY_DIR}\n"
+            "Please update the POLY_DIR path in the CONFIG section."
+        )
+    if not DATA_DIR.exists():
+        raise FileNotFoundError(
+            f"DATA_DIR does not exist: {DATA_DIR}\n"
+            "Please update the DATA_DIR path in the CONFIG section."
+        )
 
 
 def read_wallets(csv_path: Path) -> list[dict]:
@@ -108,7 +117,7 @@ def fetch_trades(address: str, market_id: str) -> list:
         offset += PAGE_LIMIT
     return all_trades
 
-
+#issue: does not account for merges
 def calculate_roi(trades: list, resolution_price: int) -> dict | None:
     """
     ROI = (Total Sold + Leftover Shares Value - Total Spent ) / Total Spent
@@ -156,7 +165,7 @@ def calculate_roi(trades: list, resolution_price: int) -> dict | None:
 
 
 def main():
-    setup_dirs()
+    check_dirs()
 
     print(f"Market     : {MARKET_ID}")
     print(f"Resolution : {'YES (1)' if RESOLUTION_PRICE == 1 else 'NO (0)'}\n")
