@@ -44,27 +44,27 @@ def check_dirs():
             "Please update the DATA_DIR path in the CONFIG section."
         )
 
-
+#reads the csv being used as input to make a list of dictionaries containing the wallet address and group it is in
 def read_wallets(csv_path: Path) -> list[dict]:
     wallets = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             address = row["identifier"].strip()
             group   = row["group_label"].strip()
-            if address:
+            if address: #stops once the row is blank (last address)
                 wallets.append({"address": address, "group": group})
     return wallets
 
-
+#returns the path for the cached wallet's address, which is specified as a parameter (cached wallet = wallet whose trades were saved after fetching from API to avoid issues leading you to restart the entire process)
 def trade_cache_path(address: str) -> Path:
     return RAW_TRADES_DIR / f"{address.lower().replace('0x', '')}.json"
 
-
+#saves a wallet's trades as a .json file
 def save_raw_trades(address: str, trades: list):
     with open(trade_cache_path(address), "w", encoding="utf-8") as f:
         json.dump(trades, f)
 
-
+#reads if a wallet's trades exist --> if yes: reads and returns it as a list, if no: returns None
 def load_raw_trades(address: str) -> list | None:
     path = trade_cache_path(address)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
